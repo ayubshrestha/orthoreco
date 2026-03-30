@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
+import { Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 
 type PatientRecord = {
   id: string;
@@ -53,6 +53,7 @@ const defaultAccount: DoctorAccount = {
 function App() {
   const [account, setAccount] = useState<DoctorAccount>(defaultAccount);
   const [loggedInDoctor, setLoggedInDoctor] = useState<DoctorAccount | null>(null);
+  const [records] = useState<PatientRecord[]>(initialRecords);
 
   return (
     <Routes>
@@ -69,7 +70,17 @@ function App() {
         path="/dashboard"
         element={
           loggedInDoctor ? (
-            <DashboardPage doctor={loggedInDoctor} records={initialRecords} onLogout={() => setLoggedInDoctor(null)} />
+            <DashboardPage doctor={loggedInDoctor} records={records} onLogout={() => setLoggedInDoctor(null)} />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+      <Route
+        path="/patients/:patientId"
+        element={
+          loggedInDoctor ? (
+            <PatientDetailsPage doctor={loggedInDoctor} records={records} onLogout={() => setLoggedInDoctor(null)} />
           ) : (
             <Navigate to="/login" replace />
           )
@@ -276,7 +287,16 @@ function DashboardPage({
 
         <section className="records-grid">
           {filteredRecords.map((record) => (
-            <article key={record.id} className="record-card">
+            <article
+              key={record.id}
+              className="record-card clickable"
+              role="button"
+              tabIndex={0}
+              onClick={() => navigate(`/patients/${record.id}`)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') navigate(`/patients/${record.id}`);
+              }}
+            >
               <div className="record-header">
                 <h3>{record.patientName}</h3>
                 <span className={`status ${record.status.toLowerCase().replace(' ', '-')}`}>{record.status}</span>
@@ -293,6 +313,106 @@ function DashboardPage({
               <p className="notes">{record.notes}</p>
             </article>
           ))}
+        </section>
+      </section>
+    </main>
+  );
+}
+
+function PatientDetailsPage({
+  doctor,
+  records,
+  onLogout
+}: {
+  doctor: DoctorAccount;
+  records: PatientRecord[];
+  onLogout: () => void;
+}) {
+  const navigate = useNavigate();
+  const { patientId } = useParams();
+
+  const patient = records.find((r) => r.id === patientId);
+
+  const handleLogout = () => {
+    onLogout();
+    navigate('/login');
+  };
+
+  if (!patientId || !patient) {
+    return (
+      <main className="dashboard-layout">
+        <aside className="sidebar">
+          <h2>CareTrack</h2>
+          <nav>
+            <button className="active" onClick={() => navigate('/dashboard')}>
+              Patient Records
+            </button>
+          </nav>
+          <button className="logout" onClick={handleLogout}>
+            Logout
+          </button>
+        </aside>
+        <section className="content-area">
+          <div className="page-top">
+            <button className="secondary" onClick={() => navigate('/dashboard')}>
+              ← Back to Dashboard
+            </button>
+          </div>
+          <section className="details-card">
+            <h1>Patient not found</h1>
+            <p>We couldn’t find a patient record for ID: {patientId ?? '(missing)'}</p>
+          </section>
+        </section>
+      </main>
+    );
+  }
+
+  return (
+    <main className="dashboard-layout">
+      <aside className="sidebar">
+        <h2>CareTrack</h2>
+        <nav>
+          <button className="active" onClick={() => navigate('/dashboard')}>
+            Patient Records
+          </button>
+        </nav>
+        <button className="logout" onClick={handleLogout}>
+          Logout
+        </button>
+      </aside>
+      <section className="content-area">
+        <div className="page-top">
+          <button className="secondary" onClick={() => navigate('/dashboard')}>
+            ← Back to Dashboard
+          </button>
+          <div className="doctor-chip">Signed in as {doctor.fullName}</div>
+        </div>
+
+        <section className="details-card">
+          <div className="details-header">
+            <div>
+              <h1>{patient.patientName}</h1>
+              <p className="muted">
+                <strong>Patient ID:</strong> {patient.id}
+              </p>
+            </div>
+            <span className={`status ${patient.status.toLowerCase().replace(' ', '-')}`}>{patient.status}</span>
+          </div>
+
+          <div className="details-grid">
+            <div className="details-item">
+              <h3>Diagnosis</h3>
+              <p>{patient.diagnosis}</p>
+            </div>
+            <div className="details-item">
+              <h3>Last Visit</h3>
+              <p>{patient.lastVisit}</p>
+            </div>
+            <div className="details-item full">
+              <h3>Daily Check Notes</h3>
+              <p>{patient.notes}</p>
+            </div>
+          </div>
         </section>
       </section>
     </main>
