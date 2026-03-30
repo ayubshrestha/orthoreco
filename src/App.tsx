@@ -50,9 +50,77 @@ const defaultAccount: DoctorAccount = {
   password: 'doctor123'
 };
 
+const STORAGE_DOCTOR_ACCOUNTS_KEY = 'caretrack_doctor_accounts';
+const STORAGE_SESSION_KEY = 'caretrack_doctor_session';
+
+type DoctorSession = {
+  email: string;
+  fullName: string;
+};
+
+function loadDoctorAccounts(): DoctorAccount[] {
+  if (typeof window === 'undefined') return [defaultAccount];
+
+  const raw = window.localStorage.getItem(STORAGE_DOCTOR_ACCOUNTS_KEY);
+  if (!raw) return [defaultAccount];
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [defaultAccount];
+
+    const accounts = parsed.filter((x): x is DoctorAccount => {
+      if (typeof x !== 'object' || x === null) return false;
+      const obj = x as Partial<DoctorAccount>;
+      return typeof obj.fullName === 'string' && typeof obj.email === 'string' && typeof obj.password === 'string';
+    });
+
+    return accounts.length ? accounts : [defaultAccount];
+  } catch {
+    return [defaultAccount];
+  }
+}
+
+function saveDoctorAccounts(accounts: DoctorAccount[]) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(STORAGE_DOCTOR_ACCOUNTS_KEY, JSON.stringify(accounts));
+}
+
+function loadSession(): DoctorSession | null {
+  if (typeof window === 'undefined') return null;
+
+  const raw = window.localStorage.getItem(STORAGE_SESSION_KEY);
+  if (!raw) return null;
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null) return null;
+    const obj = parsed as Partial<DoctorSession>;
+    if (typeof obj.email !== 'string' || typeof obj.fullName !== 'string') return null;
+    return { email: obj.email, fullName: obj.fullName };
+  } catch {
+    return null;
+  }
+}
+
+function saveSession(doctor: DoctorAccount) {
+  if (typeof window === 'undefined') return;
+  const session: DoctorSession = { email: doctor.email, fullName: doctor.fullName };
+  window.localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(session));
+}
+
+function clearSession() {
+  if (typeof window === 'undefined') return;
+  window.localStorage.removeItem(STORAGE_SESSION_KEY);
+}
+
 function App() {
-  const [account, setAccount] = useState<DoctorAccount>(defaultAccount);
-  const [loggedInDoctor, setLoggedInDoctor] = useState<DoctorAccount | null>(null);
+  const [accounts, setAccounts] = useState<DoctorAccount[]>(() => loadDoctorAccounts());
+  const [loggedInDoctor, setLoggedInDoctor] = useState<DoctorAccount | null>(() => {
+    const session = loadSession();
+    if (!session) return null;
+    const loadedAccounts = loadDoctorAccounts();
+    return loadedAccounts.find((d) => d.email === session.email) ?? null;
+  });
   const [records] = useState<PatientRecord[]>(initialRecords);
 
   return (
@@ -63,14 +131,44 @@ function App() {
       />
       <Route
         path="/login"
-        element={<LoginPage account={account} onLogin={setLoggedInDoctor} isLoggedIn={Boolean(loggedInDoctor)} />}
+        element={
+          <LoginPage
+            accounts={accounts}
+            onLogin={(doctor) => {
+              saveSession(doctor);
+              setLoggedInDoctor(doctor);
+            }}
+            isLoggedIn={Boolean(loggedInDoctor)}
+          />
+        }
       />
-      <Route path="/register" element={<RegisterPage onRegister={setAccount} />} />
+      <Route
+        path="/register"
+        element={
+          <RegisterPage
+            accounts={accounts}
+            onRegister={(doctor) => {
+              setAccounts((prev) => {
+                const next = [...prev, doctor];
+                saveDoctorAccounts(next);
+                return next;
+              });
+            }}
+          />
+        }
+      />
       <Route
         path="/dashboard"
         element={
           loggedInDoctor ? (
-            <DashboardPage doctor={loggedInDoctor} records={records} onLogout={() => setLoggedInDoctor(null)} />
+            <DashboardPage
+              doctor={loggedInDoctor}
+              records={records}
+              onLogout={() => {
+                clearSession();
+                setLoggedInDoctor(null);
+              }}
+            />
           ) : (
             <Navigate to="/login" replace />
           )
@@ -80,7 +178,14 @@ function App() {
         path="/patients/:patientId"
         element={
           loggedInDoctor ? (
-            <PatientDetailsPage doctor={loggedInDoctor} records={records} onLogout={() => setLoggedInDoctor(null)} />
+            <PatientDetailsPage
+              doctor={loggedInDoctor}
+              records={records}
+              onLogout={() => {
+                clearSession();
+                setLoggedInDoctor(null);
+              }}
+            />
           ) : (
             <Navigate to="/login" replace />
           )
@@ -92,11 +197,11 @@ function App() {
 }
 
 function LoginPage({
-  account,
+  accounts,
   onLogin,
   isLoggedIn
 }: {
-  account: DoctorAccount;
+  accounts: DoctorAccount[];
   onLogin: (doctor: DoctorAccount) => void;
   isLoggedIn: boolean;
 }) {
@@ -106,8 +211,11 @@ function LoginPage({
 
   const submitLogin = (event: FormEvent) => {
     event.preventDefault();
-    if (formData.email === account.email && formData.password === account.password) {
-      onLogin(account);
+    const doctor = accounts.find(
+      (d) => d.email.toLowerCase() === formData.email.toLowerCase() && d.password === formData.password
+    );
+    if (doctor) {
+      onLogin(doctor);
       navigate('/dashboard');
       return;
     }
@@ -153,17 +261,30 @@ function LoginPage({
   );
 }
 
-function RegisterPage({ onRegister }: { onRegister: (doctor: DoctorAccount) => void }) {
+function RegisterPage({
+  accounts,
+  onRegister
+}: {
+  accounts: DoctorAccount[];
+  onRegister: (doctor: DoctorAccount) => void;
+}) {
   const navigate = useNavigate();
   const [formData, setFormData] = useState<DoctorAccount>({
     fullName: '',
     email: '',
     password: ''
   });
+  const [error, setError] = useState('');
 
   const submitRegistration = (event: FormEvent) => {
     event.preventDefault();
-    onRegister(formData);
+    const email = formData.email.trim().toLowerCase();
+    const exists = accounts.some((a) => a.email.toLowerCase() === email);
+    if (exists) {
+      setError('An account with this email already exists.');
+      return;
+    }
+    onRegister({ ...formData, email });
     navigate('/login');
   };
 
@@ -204,6 +325,7 @@ function RegisterPage({ onRegister }: { onRegister: (doctor: DoctorAccount) => v
               placeholder="Minimum 8 characters"
             />
           </label>
+          {error && <p className="error">{error}</p>}
           <button type="submit">Register</button>
         </form>
       </section>
