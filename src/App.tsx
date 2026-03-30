@@ -226,10 +226,13 @@ function DashboardPage({
 
   const filteredRecords = useMemo(() => {
     if (!searchValue) return records;
-    const query = searchValue.toLowerCase();
-    return records.filter(
-      (record) => record.patientName.toLowerCase().includes(query) || record.id.toLowerCase().includes(query)
-    );
+    const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const query = normalize(searchValue);
+    return records.filter((record) => {
+      const name = normalize(record.patientName);
+      const id = normalize(record.id);
+      return name.includes(query) || id.includes(query);
+    });
   }, [records, searchValue]);
 
   const handleLogout = () => {
