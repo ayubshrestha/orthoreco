@@ -25,6 +25,16 @@ struct MainTabView: View{
                             .tabItem {
                                 Label("Record", systemImage: "plus.circle.fill")
                             }
+            
+            RecoveryCheckInView()
+                .tabItem {
+                    Label("Check-In", systemImage: "heart.text.square")
+                }
+
+            RecoveryHistoryView()
+                .tabItem {
+                    Label("History", systemImage: "chart.line.uptrend.xyaxis")
+                }
 
             
             MyAccountView()
@@ -36,6 +46,8 @@ struct MainTabView: View{
                             .tabItem {
                                 Label("Sync", systemImage: "heart.text.square.fill")
                             }
+            
+            
 
             
             SettingsViewScreen()
