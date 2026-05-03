@@ -67,4 +67,31 @@ final class ReportService {
 
         return try JSONDecoder().decode([PatientReport].self, from: data)
     }
+    
+    func fetchWeeklySummary() async throws -> WeeklyRecoverySummary {
+        guard let url = URL(string: "\(baseURL)/reports/me/weekly-summary") else {
+            throw URLError(.badURL)
+        }
+
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+
+        if let token = UserDefaults.standard.string(forKey: "authToken") {
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        let (data, response) = try await URLSession.shared.data(for: req)
+
+        guard let http = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+
+        guard 200...299 ~= http.statusCode else {
+            let message = String(data: data, encoding: .utf8) ?? "Server error"
+            print("Fetch weekly summary failed:", message)
+            throw URLError(.badServerResponse)
+        }
+
+        return try JSONDecoder().decode(WeeklyRecoverySummary.self, from: data)
+    }
 }

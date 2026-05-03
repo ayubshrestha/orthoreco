@@ -12,7 +12,8 @@ struct RecoveryHistoryView: View {
     @State private var reports: [PatientReport] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
-
+    @State private var weeklySummary: WeeklyRecoverySummary?
+    
     private var chartReports: [PatientReport] {
         reports.reversed()
     }
@@ -42,7 +43,13 @@ struct RecoveryHistoryView: View {
                 } else if reports.isEmpty {
                     emptyState
                 } else {
+                   
                     List {
+                        if let weeklySummary {
+                            Section("Weekly Recovery Summary") {
+                                weeklySummaryCard(weeklySummary)
+                            }
+                        }
                         Section("Risk Indicator") {
                             VStack(alignment: .leading, spacing: 10) {
                                 HStack {
@@ -202,20 +209,117 @@ struct RecoveryHistoryView: View {
             return .red
         }
     }
+    
+    private func weeklySummaryCard(_ summary: WeeklyRecoverySummary) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("This Week")
+                        .font(.headline)
+
+                    Text("\(summary.totalCheckins)/7 check-ins completed")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Text("🔥 \(summary.currentStreak) day streak")
+                    .font(.caption)
+                    .bold()
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.blue.opacity(0.15))
+                    .foregroundStyle(.blue)
+                    .clipShape(Capsule())
+            }
+
+            Divider()
+
+            HStack {
+                VStack(alignment: .leading) {
+                    Text("Avg Pain")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("\(summary.averagePain, specifier: "%.1f")/10")
+                        .bold()
+                }
+
+                Spacer()
+
+                VStack(alignment: .leading) {
+                    Text("Avg Walking")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("\(summary.averageWalkingDifficulty, specifier: "%.1f")/10")
+                        .bold()
+                }
+
+                Spacer()
+
+                VStack(alignment: .leading) {
+                    Text("Avg Confidence")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("\(summary.averageConfidence, specifier: "%.1f")/10")
+                        .bold()
+                }
+            }
+
+            HStack {
+                Text("Exercise completion")
+                Spacer()
+                Text("\(summary.exerciseCompletionPercentage, specifier: "%.0f")%")
+                    .bold()
+            }
+
+            HStack {
+                Text("Swelling days")
+                Spacer()
+                Text("\(summary.swellingDays)")
+                    .bold()
+            }
+
+            if summary.missedDaysCount > 0 {
+                Divider()
+
+                Text("Missing Check-ins")
+                    .font(.headline)
+
+                Text("\(summary.missedDaysCount) missing day(s): \(summary.missingDates.joined(separator: ", "))")
+                    .font(.subheadline)
+                    .foregroundStyle(.orange)
+            }
+
+            Divider()
+
+            Text(summary.trendMessage)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            Text(summary.riskMessage)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 8)
+    }
 
     func loadReports() async {
         isLoading = true
         errorMessage = nil
 
         do {
-            reports = try await ReportService.shared.fetchReports()
+            async let reportsResult = ReportService.shared.fetchReports()
+            async let summaryResult = ReportService.shared.fetchWeeklySummary()
+
+            reports = try await reportsResult
+            weeklySummary = try await summaryResult
         } catch {
             errorMessage = "Could not load recovery history."
         }
 
         isLoading = false
-    }
-}
+    }}
 
 #Preview {
     RecoveryHistoryView()
